@@ -1,0 +1,28 @@
+client_id,client_name,client_type,sector,sector_risk,country,pep_flag,sanctions_flag,fatf_country_flag,ofac_country_flag,sectoral_sanctions_flag,ownership_opacity_score
+1001,Alpha Holdings,Corporate,Manufacturing,High,United States,0,0,0,0,0,0.75
+1001,Alpha Holdings,Corporate,Manufacturing,High,United States,0,0,0,0,0,0.75
+1002,Beta Ventures,Corporate,Finance,Medium,Canada,1,0,0,0,0,0.40
+1003,,Individual,Technology,Low,United Kingdom,0,0,0,0,0,0.10
+1004,Delta Logistics,Corporate,Manufacturing,High,India,0,1,1,0,0,0.88
+1005,Epsilon Traders,Individual,Retail,Medium,India,0,1,1,1,1,0.92
+1006,Gamma Partners,Corporate,Finance,Medium,Brazil,0,0,0,0,0,0.65
+1007,Zeta Holdings,Offshore,Real Estate,High,Cyprus,0,0,1,0,1,0.99
+1008,Theta Group,Corporate,Technology,Medium,Singapore,0,0,0,0,0,0.35
+1009,Iota Solutions,Corporate,Consulting,Low,Germany,0,0,0,0,0,0.20
+1010,Kappa Industries,Corporate,Manufacturing,High,Germany,1,0,0,0,0,0.55
+1011,Lambda Labs,Individual,Technology,Medium,,0,0,0,0,0,0.15
+1012,Mu Services,Corporate,Consulting,Medium,Italy,0,0,0,0,0,0.44
+1013,Nu Shipping,Corporate,Logistics,High,Panama,0,0,1,1,1,0.97
+1014,Xi Capital,Corporate,Finance,Medium,Switzerland,0,0,0,0,0,0.11
+1015,Omicron Holdings,Corporate,Real Estate,High,Turkey,0,1,1,1,0,0.79
+1016,Pi Ventures,Corporate,Technology,Medium,India,1,0,0,0,0,0.33
+1017,Rho Partners,Individual,Finance,Medium,Luxembourg,0,0,0,0,0,0.48
+, Sigma Group,Corporate,Manufacturing,High,Russia,0,1,1,1,1,0.82
+1018,Tau Enterprises,Corporate,Energy,High,Iran,0,1,1,1,1,0.95
+1018,Tau Enterprises,Corporate,Energy,High,Iran,0,1,1,1,1,0.95
+1019,Upsilon Trust,Individual,Finance,Medium,Cayman Islands,0,0,0,0,1,0.89
+1020,Phi Investments,Corporate,Finance,Medium,British Virgin Islands,0,0,0,0,1,0.93
+1021,Chi Trading,Corporate,Retail,Medium,China,0,0,1,0,0,0.62
+1022,Psi Holdings,Corporate,Technology,Medium,United States,0,0,0,0,0,0.41
+1023,Omega Corp,Corporate,Defense,High,Syria,1,1,1,1,1,0.99
+1024,Duplicate Name,Corporate,Unknown,,Unknown,0,0,0,0,0,
