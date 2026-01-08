@@ -16,4 +16,4 @@ WORKDIR /app/finova_backend
 
 EXPOSE 8000
 
-CMD ["gunicorn", "finova_backend.wsgi:application", "--bind", "0.0.0.0:8000"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn finova_backend.wsgi:application --bind 0.0.0.0:8000"]
