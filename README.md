@@ -6,10 +6,6 @@
 
 ---
 
-## 🎥 Working Demo
-https://vimeo.com/1152638341
-
-
 ## 📌 Overview
 
 **Finova** is an intelligent **GenAI-powered data quality assessment system** designed for the **Fintech domain**.  
@@ -59,6 +55,11 @@ Each dimension receives:
 The diagram below represents the **semantic, privacy-preserving, and explainable architecture** of **HeartBreakers**, illustrating how datasets flow from ingestion to **Data Quality Scoring (DQS)** without exposing raw transaction data.
 
 ![HeartBreakers Architecture Diagram](docs/architecture-diagram.png)
+
+---
+## 🏗️ Flow Diagram
+
+![HeartBreakers Flow Diagram](docs/flow-diagram.png)
 
 ---
 
