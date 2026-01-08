@@ -4,3 +4,10 @@ requests
 numpy
 google-generativeai
 google-genai
+whitenoise
+django-cors-headers
+gunicorn
+psycopg[binary]
+python-dotenv
+owlready2
+dj_database_url
