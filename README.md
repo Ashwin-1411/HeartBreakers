@@ -7,7 +7,7 @@
 ---
 
 ## 🎥 Working Demo
-![HeartBreakers Working Demo](https://vimeo.com/1152638341?fl=ip&fe=ec)
+![HeartBreakers Working Demo](https://vimeo.com/1152638341)
 
 
 ## 📌 Overview
