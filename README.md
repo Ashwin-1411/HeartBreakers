@@ -6,6 +6,9 @@
 
 ---
 
+## 🎥Working Demo
+https://vimeo.com/1152638341
+
 ## 📌 Overview
 
 **Finova** is an intelligent **GenAI-powered data quality assessment system** designed for the **Fintech domain**.  
