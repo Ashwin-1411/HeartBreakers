@@ -1,16 +1,15 @@
-import json
 import logging
 import os
 from decimal import Decimal
-from typing import Any, Dict, Iterable, List, Optional, Tuple
-from urllib.parse import urlparse
+from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
-from django.contrib.auth import authenticate, get_user_model, login, logout
-from django.http import JsonResponse
-from django.middleware.csrf import get_token
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
+from django.contrib.auth import authenticate, get_user_model, logout
+from rest_framework import status
+from rest_framework.authtoken.models import Token
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
 
 from core.explanations.plain_language import (
     generate_chat_response,
@@ -26,98 +25,29 @@ logger = logging.getLogger(__name__)
 
 _default_origin = os.getenv("CORS_ALLOW_ORIGIN", "")
 _additional_origins = os.getenv("CORS_ALLOWED_ORIGINS", "")
-
-
-def _canonicalize_origin(origin: str) -> Optional[Tuple[str, str, str]]:
-    value = (origin or "").strip()
-    if not value:
-        return None
-    if "://" not in value:
-        value = f"http://{value}"
-    parsed = urlparse(value)
-    if not parsed.scheme or not parsed.netloc:
-        return None
-    scheme = parsed.scheme.lower()
-    netloc = parsed.netloc.lower()
-    canonical = f"{scheme}://{parsed.netloc}"
-    return canonical, scheme, netloc
-
-
-def _localized_aliases(canonical: str) -> List[str]:
-    parsed = urlparse(canonical)
-    host = (parsed.hostname or "").lower()
-    port = parsed.port
-    if host not in {"localhost", "127.0.0.1", "0.0.0.0"}:
-        return []
-    equivalents = {"localhost", "127.0.0.1", "0.0.0.0"}
-    equivalents.discard(host)
-    aliases: List[str] = []
-    for alias_host in equivalents:
-        netloc = f"{alias_host}:{port}" if port else alias_host
-        aliases.append(f"{parsed.scheme}://{netloc}")
-    return aliases
-
-
-ALLOWED_CORS_ORIGINS: Dict[str, Tuple[str, str]] = {}
-ALLOWED_CORS_PRIMARY: Optional[str] = None
-
-
-def _register_origin(origin: str) -> None:
-    global ALLOWED_CORS_PRIMARY
-    canonicalized = _canonicalize_origin(origin)
-    if not canonicalized:
-        return
-    canonical, scheme, netloc = canonicalized
-    if canonical not in ALLOWED_CORS_ORIGINS:
-        ALLOWED_CORS_ORIGINS[canonical] = (scheme, netloc)
-        if ALLOWED_CORS_PRIMARY is None:
-            ALLOWED_CORS_PRIMARY = canonical
-    for alias in _localized_aliases(canonical):
-        alias_canonical = _canonicalize_origin(alias)
-        if not alias_canonical:
-            continue
-        alias_key, alias_scheme, alias_netloc = alias_canonical
-        if alias_key not in ALLOWED_CORS_ORIGINS:
-            ALLOWED_CORS_ORIGINS[alias_key] = (alias_scheme, alias_netloc)
-
-
-if _additional_origins:
-    for candidate in _additional_origins.split(","):
-        _register_origin(candidate)
-
+ALLOWED_CORS_ORIGINS = {
+    origin.strip()
+    for origin in (_additional_origins.split(",") if _additional_origins else [])
+    if origin.strip()
+}
 if _default_origin:
-    _register_origin(_default_origin)
-
+    ALLOWED_CORS_ORIGINS.add(_default_origin.strip())
 if not ALLOWED_CORS_ORIGINS:
-    _register_origin("http://localhost:3000")
+    ALLOWED_CORS_ORIGINS = {"http://localhost:3000"}
 
-
-def _origin_pair_lookup(origin: str) -> Optional[Tuple[str, str]]:
-    canonicalized = _canonicalize_origin(origin)
-    if not canonicalized:
-        return None
-    canonical, scheme, netloc = canonicalized
-    if canonical in ALLOWED_CORS_ORIGINS:
-        return canonical, scheme, netloc
-    return None
-
-ALLOW_CREDENTIALS = os.getenv("CORS_ALLOW_CREDENTIALS", "true").lower() != "false"
+ALLOW_CREDENTIALS = False
 
 
 def _resolve_origin(request) -> Optional[str]:
     origin = request.headers.get("Origin") or request.META.get("HTTP_ORIGIN")
-    if origin:
-        lookup = _origin_pair_lookup(origin)
-        if lookup:
-            canonical, _, _ = lookup
-            return canonical
-        return None
-    if ALLOWED_CORS_PRIMARY:
-        return ALLOWED_CORS_PRIMARY
+    if origin and origin in ALLOWED_CORS_ORIGINS:
+        return origin
+    if len(ALLOWED_CORS_ORIGINS) == 1:
+        return next(iter(ALLOWED_CORS_ORIGINS))
     return None
 
 
-def _corsify(request, response: JsonResponse) -> JsonResponse:
+def _corsify(request, response: Response) -> Response:
     origin = _resolve_origin(request)
     if origin:
         response["Access-Control-Allow-Origin"] = origin
@@ -125,35 +55,20 @@ def _corsify(request, response: JsonResponse) -> JsonResponse:
     else:
         response["Access-Control-Allow-Origin"] = "*"
     response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-CSRFToken, X-Session-Key"
+    response["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     response["Access-Control-Max-Age"] = "86400"
     response["Access-Control-Allow-Credentials"] = "true" if origin and ALLOW_CREDENTIALS else "false"
     return response
 
 
-def _options_response(request) -> JsonResponse:
-    response = JsonResponse({"status": "ok"})
+def _build_response(request, payload: Dict[str, Any], status_code: int = status.HTTP_200_OK):
+    response = Response(payload, status=status_code)
     return _corsify(request, response)
 
 
-def _bad_request(request, message: str, status_code: int = 400) -> JsonResponse:
+def _bad_request(request, message: str, status_code: int = status.HTTP_400_BAD_REQUEST) -> Response:
     logger.warning("api_error", extra={"detail": message, "status": status_code})
-    response = JsonResponse({"error": message}, status=status_code)
-    return _corsify(request, response)
-
-
-def _unauthorized(request) -> JsonResponse:
-    response = JsonResponse({"error": "Authentication required"}, status=401)
-    return _corsify(request, response)
-
-
-def _parse_json_body(request) -> Dict[str, Any]:
-    if not request.body:
-        return {}
-    try:
-        return json.loads(request.body.decode("utf-8"))
-    except json.JSONDecodeError:
-        raise ValueError("Request body must be valid JSON") from None
+    return _build_response(request, {"error": message}, status_code)
 
 
 def _clean_for_json(value: Any) -> Any:
@@ -185,16 +100,10 @@ def _ensure_user_is_unique(username: str) -> bool:
     return not user_model.objects.filter(username=username).exists()
 
 
-@csrf_exempt
-@require_http_methods(["POST", "OPTIONS"])
+@api_view(["POST"])
+@permission_classes([AllowAny])
 def register_user(request):
-    if request.method == "OPTIONS":
-        return _options_response(request)
-
-    try:
-        payload = _parse_json_body(request)
-    except ValueError as exc:
-        return _bad_request(request, str(exc))
+    payload = request.data or {}
 
     username = (payload.get("username") or "").strip()
     password = payload.get("password") or ""
@@ -204,36 +113,31 @@ def register_user(request):
         return _bad_request(request, "Username and password are required")
 
     if not _ensure_user_is_unique(username):
-        return _bad_request(request, "Username already exists", status_code=409)
+        return _bad_request(request, "Username already exists", status_code=status.HTTP_409_CONFLICT)
 
     user_model = get_user_model()
     user = user_model.objects.create_user(username=username, email=email, password=password)
+    token, _ = Token.objects.get_or_create(user=user)
 
-    login(request, user)
-
-    response = JsonResponse(
+    # Returning a token here avoids any reliance on browser-managed cookies for new accounts.
+    return _build_response(
+        request,
         {
+            "token": token.key,
             "user": {
                 "id": user.id,
                 "username": user.username,
                 "email": user.email,
-            }
+            },
         },
-        status=201,
+        status_code=status.HTTP_201_CREATED,
     )
-    return _corsify(request, response)
 
 
-@csrf_exempt
-@require_http_methods(["POST", "OPTIONS"])
+@api_view(["POST"])
+@permission_classes([AllowAny])
 def login_user(request):
-    if request.method == "OPTIONS":
-        return _options_response(request)
-
-    try:
-        payload = _parse_json_body(request)
-    except ValueError as exc:
-        return _bad_request(request, str(exc))
+    payload = request.data or {}
 
     username = (payload.get("username") or "").strip()
     password = payload.get("password") or ""
@@ -243,41 +147,40 @@ def login_user(request):
 
     user = authenticate(request, username=username, password=password)
     if not user:
-        return _bad_request(request, "Invalid credentials", status_code=401)
+        return _bad_request(request, "Invalid credentials", status_code=status.HTTP_401_UNAUTHORIZED)
 
-    login(request, user)
-    response = JsonResponse(
+    token, _ = Token.objects.get_or_create(user=user)
+
+    # Tokens travel in Authorization headers so we can avoid third-party cookies on mobile browsers.
+    return _build_response(
+        request,
         {
+            "token": token.key,
             "user": {
                 "id": user.id,
                 "username": user.username,
                 "email": user.email,
-            }
-        }
+            },
+        },
     )
-    return _corsify(request, response)
 
 
-@csrf_exempt
-@require_http_methods(["POST", "OPTIONS"])
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def logout_user(request):
-    if request.method == "OPTIONS":
-        return _options_response(request)
+    token = getattr(request, "auth", None)
+    if token:
+        try:
+            token.delete()
+        except AttributeError:
+            Token.objects.filter(key=token).delete()
+    logout(request)
+    return _build_response(request, {"success": True})
 
-    if request.user.is_authenticated:
-        logout(request)
 
-    response = JsonResponse({"success": True})
-    return _corsify(request, response)
-
-
-@csrf_exempt
-@require_http_methods(["GET", "OPTIONS"])
+@api_view(["GET"])
+@permission_classes([AllowAny])
 def session_info(request):
-    if request.method == "OPTIONS":
-        return _options_response(request)
-
-    csrf_token = get_token(request)
     if request.user.is_authenticated:
         payload = {
             "authenticated": True,
@@ -286,24 +189,31 @@ def session_info(request):
                 "username": request.user.username,
                 "email": request.user.email,
             },
-            "csrfToken": csrf_token,
         }
     else:
-        payload = {"authenticated": False, "csrfToken": csrf_token}
+        payload = {"authenticated": False}
 
-    response = JsonResponse(payload)
-    return _corsify(request, response)
+    return _build_response(request, payload)
 
 
-@csrf_exempt
-@require_http_methods(["POST", "OPTIONS"])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def auth_me(request):
+    return _build_response(
+        request,
+        {
+            "user": {
+                "id": request.user.id,
+                "username": request.user.username,
+                "email": request.user.email,
+            }
+        },
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def analyze_dataset(request):
-    if request.method == "OPTIONS":
-        return _options_response(request)
-
-    if not request.user.is_authenticated:
-        return _unauthorized(request)
-
     logger.info("request_received", extra={"path": request.path, "user": request.user.id})
 
     csv_file = request.FILES.get("file")
@@ -391,41 +301,28 @@ def analyze_dataset(request):
 
     response_payload["analysis_id"] = record.id
 
-    response = JsonResponse(response_payload, status=200)
-    return _corsify(request, response)
+    return _build_response(request, response_payload)
 
 
-@csrf_exempt
-@require_http_methods(["GET", "OPTIONS"])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def list_history(request):
-    if request.method == "OPTIONS":
-        return _options_response(request)
-
-    if not request.user.is_authenticated:
-        return _unauthorized(request)
-
     results = AnalysisResult.objects.filter(user=request.user).order_by("-created_at")
     payload = _serialize_results(results)
 
-    response = JsonResponse({"results": payload})
-    return _corsify(request, response)
+    return _build_response(request, {"results": payload})
 
 
-@csrf_exempt
-@require_http_methods(["GET", "OPTIONS"])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def history_detail(request, pk: int):
-    if request.method == "OPTIONS":
-        return _options_response(request)
-
-    if not request.user.is_authenticated:
-        return _unauthorized(request)
-
     try:
         record = AnalysisResult.objects.get(pk=pk, user=request.user)
     except AnalysisResult.DoesNotExist:  # pragma: no cover - thin wrapper
         return _bad_request(request, "Analysis result not found", status_code=404)
 
-    response = JsonResponse(
+    return _build_response(
+        request,
         {
             "id": record.id,
             "dataset_name": record.dataset_name,
@@ -435,9 +332,8 @@ def history_detail(request, pk: int):
             "reasoned_stats": record.reasoned_stats,
             "genai_summary": record.genai_summary,
             "genai_recommendations": record.genai_recommendations,
-        }
+        },
     )
-    return _corsify(request, response)
 
 
 def _dimension_trend(series: List[Dict[str, Any]]) -> Dict[str, str]:
@@ -462,30 +358,24 @@ def _dimension_trend(series: List[Dict[str, Any]]) -> Dict[str, str]:
     return trends
 
 
-@csrf_exempt
-@require_http_methods(["GET", "OPTIONS"])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def trend_view(request):
-    if request.method == "OPTIONS":
-        return _options_response(request)
-
-    if not request.user.is_authenticated:
-        return _unauthorized(request)
-
     window_size = 5
     results = list(
         AnalysisResult.objects.filter(user=request.user)
         .order_by("-created_at")[:window_size]
     )
     if not results:
-        response = JsonResponse(
+        return _build_response(
+            request,
             {
                 "overall_trend": "stable",
                 "delta": 0.0,
                 "dimension_trends": {},
                 "timeline": [],
-            }
+            },
         )
-        return _corsify(request, response)
 
     timeline = [
         {
@@ -510,23 +400,20 @@ def trend_view(request):
     dimension_series = [record.dimension_scores for record in reversed(results)]
     dimension_trends = _dimension_trend(dimension_series)
 
-    response = JsonResponse(
+    return _build_response(
+        request,
         {
             "overall_trend": trend,
             "delta": round(delta, 4),
             "dimension_trends": dimension_trends,
             "timeline": timeline,
-        }
+        },
     )
-    return _corsify(request, response)
 
 
-@csrf_exempt
-@require_http_methods(["GET", "OPTIONS"])
+@api_view(["GET"])
+@permission_classes([AllowAny])
 def health_check(request):
-    if request.method == "OPTIONS":
-        return _options_response(request)
-
     try:
         load_ontology()
         onto_status = True
@@ -534,25 +421,19 @@ def health_check(request):
         logger.exception("ontology_health_failed")
         onto_status = False
 
-    response = JsonResponse(
+    return _build_response(
+        request,
         {
             "status": "ok",
             "ontology_loaded": onto_status,
-        }
+        },
     )
-    return _corsify(request, response)
 
 
-@csrf_exempt
-@require_http_methods(["POST", "OPTIONS"])
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def chat_agent(request):
-    if request.method == "OPTIONS":
-        return _options_response(request)
-
-    try:
-        payload = _parse_json_body(request)
-    except ValueError as exc:
-        return _bad_request(request, str(exc))
+    payload = request.data or {}
 
     message = payload.get("message", "")
     context = payload.get("context") or {}
@@ -564,5 +445,4 @@ def chat_agent(request):
 
     response_text = generate_chat_response(message, context)
 
-    response = JsonResponse({"response": response_text})
-    return _corsify(request, response)
+    return _build_response(request, {"response": response_text})

@@ -7,6 +7,7 @@ urlpatterns = [
     path("auth/login/", views.login_user, name="login"),
     path("auth/logout/", views.logout_user, name="logout"),
     path("auth/session/", views.session_info, name="session-info"),
+    path("auth/me/", views.auth_me, name="auth-me"),
     path("analyze/", views.analyze_dataset, name="analyze"),
     path("history/", views.list_history, name="history"),
     path("history/<int:pk>/", views.history_detail, name="history-detail"),

@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { ApiError, SessionPayload, UserProfile, authApi } from "@/lib/api";
+import { ApiError, UserProfile, authApi, clearAuthToken, getAuthToken, setAuthToken } from "@/lib/api";
 
 interface SessionState {
   authenticated: boolean;
@@ -21,13 +21,6 @@ interface SessionContextValue {
 
 const SessionContext = createContext<SessionContextValue | undefined>(undefined);
 
-function mapSessionPayload(payload: SessionPayload): SessionState {
-  if (!payload.authenticated || !payload.user) {
-    return { authenticated: false };
-  }
-  return { authenticated: true, user: payload.user };
-}
-
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionState>({ authenticated: false });
   const [loading, setLoading] = useState(true);
@@ -46,11 +39,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     try {
       setLoading(true);
-      const payload = await authApi.session();
-      setSession(mapSessionPayload(payload));
+      const token = getAuthToken();
+      if (!token) {
+        setSession({ authenticated: false });
+        setError(null);
+        return;
+      }
+      const { user } = await authApi.me();
+      setSession({ authenticated: true, user });
       setError(null);
     } catch (err) {
       handleError(err);
+      clearAuthToken();
       setSession({ authenticated: false });
     } finally {
       setLoading(false);
@@ -65,7 +65,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     async (username: string, password: string) => {
       setError(null);
       try {
-        const { user } = await authApi.login(username, password);
+        const { token, user } = await authApi.login(username, password);
+        setAuthToken(token);
         setSession({ authenticated: true, user });
       } catch (err) {
         handleError(err);
@@ -79,7 +80,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     async (username: string, password: string, email?: string) => {
       setError(null);
       try {
-        const { user } = await authApi.register(username, password, email);
+        const { token, user } = await authApi.register(username, password, email);
+        setAuthToken(token);
         setSession({ authenticated: true, user });
       } catch (err) {
         handleError(err);
@@ -93,6 +95,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       await authApi.logout();
     } finally {
+      clearAuthToken();
       setSession({ authenticated: false });
     }
   }, []);

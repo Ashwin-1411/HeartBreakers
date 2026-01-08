@@ -12,6 +12,98 @@ export class ApiError extends Error {
 
 const configuredBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://heartbreakers.onrender.com";
 
+const AUTH_TOKEN_STORAGE_KEY = "finova:authToken";
+let cachedToken: string | null | undefined;
+
+function readStoredToken(): string | null {
+  if (cachedToken !== undefined) {
+    return cachedToken;
+  }
+  if (typeof window === "undefined") {
+    return null;
+  }
+  cachedToken = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  return cachedToken;
+}
+
+export function getAuthToken(): string | null {
+  return readStoredToken();
+}
+
+export function setAuthToken(token: string | null) {
+  if (typeof token === "string" && token) {
+    cachedToken = token;
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+    }
+    return;
+  }
+
+  cachedToken = null;
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  }
+}
+
+export function clearAuthToken() {
+  setAuthToken(null);
+}
+
+function toHeaderRecord(headers?: HeadersInit): Record<string, string> {
+  if (!headers) {
+    return {};
+  }
+
+  if (Array.isArray(headers)) {
+    return headers.reduce<Record<string, string>>((accumulator, [key, value]) => {
+      if (key) {
+        accumulator[key] = String(value);
+      }
+      return accumulator;
+    }, {});
+  }
+
+  if (typeof Headers !== "undefined" && headers instanceof Headers) {
+    const record: Record<string, string> = {};
+    headers.forEach((value, key) => {
+      record[key] = value;
+    });
+    return record;
+  }
+
+  return { ...(headers as Record<string, string>) };
+}
+
+function buildHeaders(body: BodyInit | null | undefined, headers?: HeadersInit, skipAuth?: boolean): Record<string, string> {
+  const record = toHeaderRecord(headers);
+  const hasContentType = "Content-Type" in record || "content-type" in record;
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+
+  if (!isFormData && !hasContentType) {
+    record["Content-Type"] = "application/json";
+  }
+
+  if (!skipAuth) {
+    const token = getAuthToken();
+    if (token) {
+      record.Authorization = `Token ${token}`;
+    }
+  }
+
+  return record;
+}
+
+function handleUnauthorized(skipRedirect?: boolean) {
+  // Dropping the stored token keeps auth functional when browsers block third-party cookies.
+  clearAuthToken();
+  if (skipRedirect) {
+    return;
+  }
+  if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+    window.location.replace("/login");
+  }
+}
+
 function resolveApiBase(urlString: string): string {
   try {
     const url = new URL(urlString);
@@ -40,18 +132,15 @@ function normalizePath(path: string): string {
   return query ? `${withTrailingSlash}?${query}` : withTrailingSlash;
 }
 
-type RequestOptions = RequestInit & { skipJson?: boolean };
+type RequestOptions = RequestInit & { skipJson?: boolean; skipAuth?: boolean; skipAuthRedirect?: boolean };
 
 async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { skipJson, headers, ...rest } = options;
+  const { skipJson, skipAuth, skipAuthRedirect, headers, ...rest } = options;
   const normalizedPath = normalizePath(path);
+  const requestHeaders = buildHeaders(rest.body as BodyInit | null | undefined, headers, skipAuth);
   const response = await fetch(`${apiBase}${normalizedPath}`, {
-    credentials: "include",
     ...rest,
-    headers: {
-      "Content-Type": "application/json",
-      ...(headers || {}),
-    },
+    headers: requestHeaders,
   });
 
   if (response.status === 204 || skipJson) {
@@ -61,6 +150,10 @@ async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<
   const contentType = response.headers.get("content-type") || "";
   const isJson = contentType.includes("application/json");
   const data = isJson ? await response.json() : undefined;
+
+  if (response.status === 401) {
+    handleUnauthorized(skipAuthRedirect);
+  }
 
   if (!response.ok) {
     const message = (data as { error?: string; message?: string } | undefined)?.error ||
@@ -76,12 +169,6 @@ export interface UserProfile {
   id: number;
   username: string;
   email?: string | null;
-}
-
-export interface SessionPayload {
-  authenticated: boolean;
-  user?: UserProfile;
-  csrfToken?: string;
 }
 
 export interface ReasonedStat {
@@ -142,23 +229,27 @@ export interface TrendResponse {
 }
 
 export const authApi = {
-  async session(): Promise<SessionPayload> {
-    return apiFetch<SessionPayload>("/auth/session/");
-  },
   async login(username: string, password: string) {
-    return apiFetch<{ user: UserProfile }>("/auth/login/", {
+    return apiFetch<{ token: string; user: UserProfile }>("/auth/login/", {
       method: "POST",
+      skipAuth: true,
+      skipAuthRedirect: true,
       body: JSON.stringify({ username, password }),
     });
   },
   async register(username: string, password: string, email?: string) {
-    return apiFetch<{ user: UserProfile }>("/auth/register/", {
+    return apiFetch<{ token: string; user: UserProfile }>("/auth/register/", {
       method: "POST",
+      skipAuth: true,
+      skipAuthRedirect: true,
       body: JSON.stringify({ username, password, email }),
     });
   },
   async logout() {
     await apiFetch("/auth/logout/", { method: "POST", body: JSON.stringify({}) });
+  },
+  async me(): Promise<{ user: UserProfile }> {
+    return apiFetch<{ user: UserProfile }>("/auth/me/");
   },
 };
 
@@ -168,14 +259,20 @@ export const analysisApi = {
     formData.append("file", file);
     const endpoint = includeExplanation ? "/analyze/?explain=1" : "/analyze/";
 
+    const headers = buildHeaders(formData, undefined, false);
+    // Token header keeps uploads authenticated without relying on third-party cookies.
     const response = await fetch(`${apiBase}${normalizePath(endpoint)}`, {
       method: "POST",
-      credentials: "include",
       body: formData,
+      headers,
     });
 
     const contentType = response.headers.get("content-type") || "";
     const data = contentType.includes("application/json") ? await response.json() : undefined;
+
+    if (response.status === 401) {
+      handleUnauthorized();
+    }
 
     if (!response.ok) {
       const message = (data && (data.error || data.message)) || "Failed to analyze dataset";
