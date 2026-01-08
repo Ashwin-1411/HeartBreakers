@@ -49,21 +49,88 @@ Each dimension receives:
 - 📝 Clear, human-readable explanation
 
 ---
+## 🏗️ Architecture Diagram
 
-## 🏗️ System Architecture
+### 📌 End-to-End System Architecture
 
-### 🔹 1. Knowledge Layer (Ontology-Driven)
-- Domain-specific ontology for payments data
-- Maps attributes → quality dimensions
-- Reasons over relationships and context
-- Produces **semantic abstractions**, not raw data
+The diagram below represents the **semantic, privacy-preserving, and explainable architecture** of **HeartBreakers**, illustrating how datasets flow from ingestion to **Data Quality Scoring (DQS)** without exposing raw transaction data.
 
-### 🔹 2. GenAI Layer (Explainability Only)
-- Converts semantic outputs into:
+![HeartBreakers Architecture Diagram](docs/architecture-diagram.png)
+
+---
+
+### 🔍 Architecture Flow Explanation
+
+#### 1️⃣ User & Interface Layer
+- **User Interface (Next.js Dashboard)**  
+  Enables users to securely upload datasets (file / table / API source) and visualize results.
+- **API Gateway**  
+  Acts as a controlled entry point enforcing governance, validation, and access policies.
+
+---
+
+#### 2️⃣ Data Profiling Layer
+- **Data Profiler**
+  - Extracts statistical summaries and metadata
+  - Identifies schema, missing values, patterns, and distributions
+  - Outputs **profiled data and metadata** without exposing raw data
+
+---
+
+#### 3️⃣ Knowledge Layer (Ontology-Driven Semantic Understanding)
+This is the **core intelligence layer** of the system.
+
+- **Critical Attribute Identifier**  
+  Identifies attributes that significantly impact data quality.
+- **Attribute–Dimension Mapper**  
+  Maps dataset attributes to standard data quality dimensions
+  (accuracy, completeness, consistency, timeliness, etc.).
+- **Impact Analyzer**  
+  Evaluates how each attribute influences overall data quality.
+- **Domain-Specific Ontology**  
+  Encodes relationships between attributes, dimensions, and domain context,
+  enabling semantic reasoning instead of static rule-based logic.
+
+📤 **Output:** Reasoned semantic statistics (no raw data).
+
+---
+
+#### 4️⃣ GenAI Layer (Explainability Only)
+- Consumes **semantic reasoning outputs** from the ontology layer
+- Generates:
   - Plain-language explanations
-  - Actionable improvement recommendations
-- **Does NOT calculate scores**
-- Operates only on **semantic facts**, ensuring zero hallucination
+  - Dimension-level reasoning
+  - Actionable data quality improvement recommendations
+- **GenAI does NOT compute scores**
+- Operates only on semantic abstractions, ensuring zero hallucination and high trust
+
+---
+
+#### 5️⃣ Output Layer (UI)
+Displayed to the user:
+- ✅ Composite Data Quality Score (DQS)
+- 📊 Dimension-level quality scores
+- 🧠 Reasoning and explanations
+- 🛠️ Actionable improvement points
+
+---
+
+### 🔐 Privacy & Governance by Design
+
+- Raw datasets never reach the GenAI layer
+- Only semantic abstractions and reasoning facts are shared
+- No transaction data is stored
+- Fully compliant, auditable, and privacy-preserving
+
+---
+
+### 💡 Architectural Advantages
+
+- Ontology-driven semantic reasoning (not static rules)
+- Evolutionary-algorithm-ready design for trade-off optimization
+- GenAI used strictly for explainability, not decision-making
+- Reusable and extensible architecture across domains
+
 
 ---
 
