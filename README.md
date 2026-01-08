@@ -137,7 +137,6 @@ Displayed to the user:
 ### 💡 Architectural Advantages
 
 - Ontology-driven semantic reasoning (not static rules)
-- Evolutionary-algorithm-ready design for trade-off optimization
 - GenAI used strictly for explainability, not decision-making
 - Reusable and extensible architecture across domains
 
@@ -156,7 +155,6 @@ Displayed to the user:
 ## 🧠 Why This Approach Stands Out
 
 ✔ Ontology-driven reasoning (not static rules)  
-✔ Evolutionary trade-off optimization (not fixed scoring)  
 ✔ GenAI used **only** for explainability  
 ✔ Maximum privacy via semantic abstraction  
 ✔ Reusable and extensible framework across domains  
