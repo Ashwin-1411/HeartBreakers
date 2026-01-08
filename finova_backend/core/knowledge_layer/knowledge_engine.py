@@ -49,6 +49,7 @@ def run_knowledge_layer(profile):
     )
 
     critical_attrs = identify_critical_attributes(ontology, profile)
+    matched_attribute_count = len(critical_attrs)
     logger.debug(
         "[ENGINE] Critical attribute summary:\n%s",
         pformat(_strip_internal_refs(critical_attrs)) if critical_attrs else "<none>",
@@ -86,4 +87,5 @@ def run_knowledge_layer(profile):
         "summary": summary,
         "overall_dqs": overall_dqs,
         "dimension_scores": dimension_scores,
+        "matched_attributes": matched_attribute_count,
     }

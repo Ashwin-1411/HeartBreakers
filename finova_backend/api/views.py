@@ -1,7 +1,7 @@
 import logging
 import os
 from decimal import Decimal
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
 from django.contrib.auth import authenticate, get_user_model, logout
@@ -36,6 +36,59 @@ if not ALLOWED_CORS_ORIGINS:
     ALLOWED_CORS_ORIGINS = {"http://localhost:3000"}
 
 ALLOW_CREDENTIALS = False
+
+FINANCE_KEYWORDS = {
+    "account",
+    "aml",
+    "client",
+    "compliance",
+    "country",
+    "customer",
+    "fatf",
+    "finance",
+    "kyb",
+    "kyc",
+    "merchant",
+    "onboard",
+    "ownership",
+    "pep",
+    "risk",
+    "sanction",
+    "sector",
+    "transaction",
+}
+
+MIN_FINANCE_MATCHES = 2
+MIN_FINANCE_COLUMNS = 2
+
+
+def _detect_finance_domain(columns: Iterable[str]) -> Tuple[bool, Dict[str, Any]]:
+    matched_keywords: set[str] = set()
+    matched_columns: List[str] = []
+    normalized_columns = [str(column or "").strip() for column in columns]
+
+    for name in normalized_columns:
+        if not name:
+            continue
+        lowered = name.lower()
+        for keyword in FINANCE_KEYWORDS:
+            if keyword in lowered:
+                matched_keywords.add(keyword)
+                matched_columns.append(name)
+                break
+
+    is_finance = (
+        len(matched_keywords) >= MIN_FINANCE_MATCHES
+        and len(set(matched_columns)) >= MIN_FINANCE_COLUMNS
+    )
+
+    debug = {
+        "matched_keywords": sorted(matched_keywords),
+        "matched_columns": sorted(set(matched_columns)),
+        "total_columns": len(normalized_columns),
+    }
+
+    return is_finance, debug
 
 
 def _resolve_origin(request) -> Optional[str]:
@@ -226,6 +279,19 @@ def analyze_dataset(request):
         logger.exception("csv_parse_failed")
         return _bad_request(request, f"Unable to parse CSV: {exc}")
 
+    finance_ok, finance_debug = _detect_finance_domain(df.columns)
+    logger.info(
+        "finance_domain_check",
+        extra={"user": request.user.id, "is_finance": finance_ok, **finance_debug},
+    )
+
+    if not finance_ok:
+        guidance = (
+            "Uploaded CSV does not appear to contain financial compliance fields. "
+            "Include columns referencing clients, accounts, sanctions, PEP, or similar controls."
+        )
+        return _bad_request(request, guidance)
+
     dataset_metadata = {"rows": len(df), "columns": len(df.columns)}
     logger.info("profiling_started", extra={"dataset": dataset_metadata, "user": request.user.id})
 
@@ -236,10 +302,17 @@ def analyze_dataset(request):
     reasoned_stats = _clean_for_json(knowledge_output.get("reasoned_stats", []))
     overall_dqs = float(knowledge_output.get("overall_dqs", 1.0))
     dimension_scores = _clean_for_json(knowledge_output.get("dimension_scores", {}))
+    matched_attributes = int(knowledge_output.get("matched_attributes", 0) or 0)
     logger.info(
         "violations_detected",
-        extra={"violations": {"total": len(reasoned_stats)}, "user": request.user.id},
+        extra={"violations": {"total": len(reasoned_stats)}, "user": request.user.id, "matched_attributes": matched_attributes},
     )
+
+    if matched_attributes == 0:
+        return _bad_request(
+            request,
+            "Dataset attributes do not match Finova's financial ontology. Provide a financial compliance dataset.",
+        )
 
     explain_flag = request.GET.get("explain")
     include_explanation = bool(explain_flag and explain_flag.lower() in {"1", "true", "yes"})
@@ -257,6 +330,7 @@ def analyze_dataset(request):
         "summary": knowledge_output.get("summary"),
         "overall_dqs": overall_dqs,
         "dimension_scores": dimension_scores,
+        "finance_domain": finance_debug,
     }
 
     if structured_explanation:
@@ -274,6 +348,8 @@ def analyze_dataset(request):
         "profile": profile,
         "overall_dqs": overall_dqs,
         "dimension_scores": dimension_scores,
+        "finance_domain": finance_debug,
+        "matched_attributes": matched_attributes,
     }
 
     if structured_explanation:
