@@ -5,6 +5,7 @@ from .ontology_loader import load_ontology
 from .critical_identifier import identify_critical_attributes
 from .dimension_mapper import map_dimensions_and_impacts
 from .violation_reasoner import reason_violations
+from .dqs_calculator import compute_overall_dqs
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
@@ -65,6 +66,13 @@ def run_knowledge_layer(profile):
         pformat(violations) if violations else "<none>",
     )
 
+    overall_dqs, dimension_scores = compute_overall_dqs(violations)
+    logger.debug(
+        "[ENGINE] DQS computed: overall=%s, dimensions=%s",
+        overall_dqs,
+        dimension_scores,
+    )
+
     summary = (
         "No violations detected; dataset passes current knowledge-layer rules."
         if not violations
@@ -76,4 +84,6 @@ def run_knowledge_layer(profile):
     return {
         "reasoned_stats": violations,
         "summary": summary,
+        "overall_dqs": overall_dqs,
+        "dimension_scores": dimension_scores,
     }

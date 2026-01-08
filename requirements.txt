@@ -2,3 +2,5 @@ pandas
 django
 requests
 numpy
+google-generativeai
+google-genai
