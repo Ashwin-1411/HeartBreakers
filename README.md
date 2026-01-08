@@ -184,13 +184,10 @@ HeartBreakers/
 3. Ontology layer identifies:
    - Relevant attributes
    - Applicable quality dimensions
-4. Evolutionary algorithm:
-   - Optimizes dimension weights
-   - Computes stable DQS
-5. GenAI generates:
+4. GenAI generates:
    - Explanations
    - Recommendations
-6. UI displays scores, insights, and improvement paths
+5. UI displays scores, insights, and improvement paths
 
 ---
 
