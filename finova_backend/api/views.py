@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
-from django.contrib.auth import authenticate, get_user_model, logout
+from django.contrib.auth import get_user_model, logout
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
@@ -20,6 +20,7 @@ from core.knowledge_layer.ontology_loader import load_ontology
 from core.profiler.data_profiler import profile_dataset
 
 from .models import AnalysisResult
+from .security import constant_time_check, hash_password, validate_password_strength
 
 logger = logging.getLogger(__name__)
 
@@ -168,8 +169,14 @@ def register_user(request):
     if not _ensure_user_is_unique(username):
         return _bad_request(request, "Username already exists", status_code=status.HTTP_409_CONFLICT)
 
+    validation = validate_password_strength(password)
+    if not validation.is_valid:
+        return _bad_request(request, validation.error or "Password does not meet complexity requirements")
+
     user_model = get_user_model()
-    user = user_model.objects.create_user(username=username, email=email, password=password)
+    user = user_model.objects.create_user(username=username, email=email, password=None)
+    user.password = hash_password(password)
+    user.save(update_fields=["password"])
     token, _ = Token.objects.get_or_create(user=user)
 
     # Returning a token here avoids any reliance on browser-managed cookies for new accounts.
@@ -198,8 +205,10 @@ def login_user(request):
     if not username or not password:
         return _bad_request(request, "Username and password are required")
 
-    user = authenticate(request, username=username, password=password)
-    if not user:
+    user_model = get_user_model()
+    user = user_model.objects.filter(username=username).first()
+    password_ok = constant_time_check(password, user.password if user else None)
+    if not user or not user.is_active or not password_ok:
         return _bad_request(request, "Invalid credentials", status_code=status.HTTP_401_UNAUTHORIZED)
 
     token, _ = Token.objects.get_or_create(user=user)

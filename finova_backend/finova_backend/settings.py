@@ -114,6 +114,13 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Prefer bcrypt for password storage; Django will transparently upgrade legacy hashes on login.
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+]
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/

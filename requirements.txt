@@ -12,3 +12,4 @@ psycopg[binary]
 python-dotenv
 owlready2
 dj_database_url
+bcrypt

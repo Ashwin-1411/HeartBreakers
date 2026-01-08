@@ -55,3 +55,48 @@ class AnalyzeDatasetViewTests(TestCase):
 		self.assertIn("ontology", body.get("error", "").lower())
 
 		mock_run.assert_called_once()
+
+
+class AuthenticationSecurityTests(TestCase):
+	def setUp(self):
+		self.client = APIClient()
+		self.register_url = reverse("register")
+		self.login_url = reverse("login")
+
+	def test_registration_rejects_weak_password(self):
+		payload = {
+			"username": "weakling",
+			"password": "password123",
+			"email": "weak@example.com",
+		}
+
+		response = self.client.post(self.register_url, payload, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("password", response.json().get("error", "").lower())
+
+	def test_registration_and_login_with_strong_password(self):
+		strong_password = "UltraStrong!234"
+		payload = {
+			"username": "secureuser",
+			"password": strong_password,
+			"email": "secure@example.com",
+		}
+
+		response = self.client.post(self.register_url, payload, format="json")
+
+		self.assertEqual(response.status_code, 201)
+		body = response.json()
+		self.assertIn("token", body)
+
+		user = get_user_model().objects.get(username="secureuser")
+		self.assertTrue(user.password.startswith("bcrypt_sha256$"))
+
+		login_response = self.client.post(
+			self.login_url,
+			{"username": "secureuser", "password": strong_password},
+			format="json",
+		)
+
+		self.assertEqual(login_response.status_code, 200)
+		self.assertIn("token", login_response.json())
