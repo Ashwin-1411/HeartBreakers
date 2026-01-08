@@ -51,6 +51,12 @@ Each dimension receives:
 - 📝 Clear, human-readable explanation
 
 ---
+## 🏗️ Flow Diagram
+
+![HeartBreakers Flow Diagram](docs/flow-diagram.png)
+
+---
+
 ## 🏗️ Architecture Diagram
 
 ### 📌 End-to-End System Architecture
@@ -58,11 +64,6 @@ Each dimension receives:
 The diagram below represents the **semantic, privacy-preserving, and explainable architecture** of **HeartBreakers**, illustrating how datasets flow from ingestion to **Data Quality Scoring (DQS)** without exposing raw transaction data.
 
 ![HeartBreakers Architecture Diagram](docs/architecture-diagram.png)
-
----
-## 🏗️ Flow Diagram
-
-![HeartBreakers Flow Diagram](docs/flow-diagram.png)
 
 ---
 
