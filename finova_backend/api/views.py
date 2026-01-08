@@ -2,11 +2,9 @@ import json
 import logging
 import os
 from decimal import Decimal
-from importlib import import_module
 from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
-from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
@@ -38,72 +36,6 @@ if not ALLOWED_CORS_ORIGINS:
     ALLOWED_CORS_ORIGINS = {"http://localhost:3000"}
 
 ALLOW_CREDENTIALS = os.getenv("CORS_ALLOW_CREDENTIALS", "true").lower() != "false"
-
-
-SessionStore = import_module(settings.SESSION_ENGINE).SessionStore
-
-
-def _ensure_session_key(request) -> Optional[str]:
-    session_key = getattr(request.session, "session_key", None)
-    if session_key:
-        return session_key
-    try:
-        request.session.save()
-    except Exception:  # noqa: BLE001 - defensive fallback
-        return None
-    return getattr(request.session, "session_key", None)
-
-
-def _extract_session_key(request) -> Optional[str]:
-    header = request.headers.get("X-Session-Key")
-    if not header:
-        authorization = request.headers.get("Authorization")
-        if authorization:
-            parts = authorization.strip().split(" ", 1)
-            if len(parts) == 2 and parts[0].lower() in {"bearer", "session"}:
-                header = parts[1]
-            else:
-                header = authorization
-    if not header:
-        return None
-    return header.strip() or None
-
-
-def _hydrate_user_from_header(request) -> bool:
-    if getattr(request, "user", None) and request.user.is_authenticated:
-        return True
-
-    session_key = _extract_session_key(request)
-    if not session_key:
-        return False
-
-    session = SessionStore(session_key=session_key)
-    try:
-        session_data = session.load()
-    except Exception:  # noqa: BLE001 - treat invalid session as unauthenticated
-        return False
-
-    user_id = session_data.get("_auth_user_id")
-    if not user_id:
-        return False
-
-    user_model = get_user_model()
-    try:
-        user = user_model.objects.get(pk=user_id)
-    except user_model.DoesNotExist:
-        return False
-
-    request.session = session
-    request._session = session  # type: ignore[attr-defined]
-    request.user = user  # type: ignore[attr-defined]
-    request._cached_user = user  # type: ignore[attr-defined]
-    return True
-
-
-def _require_authenticated_user(request) -> bool:
-    if getattr(request, "user", None) and request.user.is_authenticated:
-        return True
-    return _hydrate_user_from_header(request)
 
 
 def _resolve_origin(request) -> Optional[str]:
@@ -209,16 +141,13 @@ def register_user(request):
 
     login(request, user)
 
-    session_key = _ensure_session_key(request)
-
     response = JsonResponse(
         {
             "user": {
                 "id": user.id,
                 "username": user.username,
                 "email": user.email,
-            },
-            "sessionKey": session_key,
+            }
         },
         status=201,
     )
@@ -247,16 +176,13 @@ def login_user(request):
         return _bad_request(request, "Invalid credentials", status_code=401)
 
     login(request, user)
-    session_key = _ensure_session_key(request)
-
     response = JsonResponse(
         {
             "user": {
                 "id": user.id,
                 "username": user.username,
                 "email": user.email,
-            },
-            "sessionKey": session_key,
+            }
         }
     )
     return _corsify(request, response)
@@ -267,8 +193,6 @@ def login_user(request):
 def logout_user(request):
     if request.method == "OPTIONS":
         return _options_response(request)
-
-    _hydrate_user_from_header(request)
 
     if request.user.is_authenticated:
         logout(request)
@@ -283,10 +207,7 @@ def session_info(request):
     if request.method == "OPTIONS":
         return _options_response(request)
 
-    _hydrate_user_from_header(request)
-
     csrf_token = get_token(request)
-    session_key = _ensure_session_key(request)
     if request.user.is_authenticated:
         payload = {
             "authenticated": True,
@@ -296,10 +217,9 @@ def session_info(request):
                 "email": request.user.email,
             },
             "csrfToken": csrf_token,
-            "sessionKey": session_key,
         }
     else:
-        payload = {"authenticated": False, "csrfToken": csrf_token, "sessionKey": session_key}
+        payload = {"authenticated": False, "csrfToken": csrf_token}
 
     response = JsonResponse(payload)
     return _corsify(request, response)
@@ -311,7 +231,7 @@ def analyze_dataset(request):
     if request.method == "OPTIONS":
         return _options_response(request)
 
-    if not _require_authenticated_user(request):
+    if not request.user.is_authenticated:
         return _unauthorized(request)
 
     logger.info("request_received", extra={"path": request.path, "user": request.user.id})
@@ -411,7 +331,7 @@ def list_history(request):
     if request.method == "OPTIONS":
         return _options_response(request)
 
-    if not _require_authenticated_user(request):
+    if not request.user.is_authenticated:
         return _unauthorized(request)
 
     results = AnalysisResult.objects.filter(user=request.user).order_by("-created_at")
@@ -427,7 +347,7 @@ def history_detail(request, pk: int):
     if request.method == "OPTIONS":
         return _options_response(request)
 
-    if not _require_authenticated_user(request):
+    if not request.user.is_authenticated:
         return _unauthorized(request)
 
     try:
@@ -478,7 +398,7 @@ def trend_view(request):
     if request.method == "OPTIONS":
         return _options_response(request)
 
-    if not _require_authenticated_user(request):
+    if not request.user.is_authenticated:
         return _unauthorized(request)
 
     window_size = 5

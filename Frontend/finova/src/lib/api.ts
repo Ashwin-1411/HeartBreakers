@@ -12,81 +12,6 @@ export class ApiError extends Error {
 
 const configuredBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://heartbreakers.onrender.com";
 
-const SESSION_KEY_STORAGE = "finova:sessionKey";
-let inMemorySessionKey: string | null | undefined;
-
-function readStoredSessionKey(): string | null {
-  if (inMemorySessionKey !== undefined) {
-    return inMemorySessionKey;
-  }
-  if (typeof window === "undefined") {
-    return null;
-  }
-  inMemorySessionKey = window.localStorage.getItem(SESSION_KEY_STORAGE);
-  return inMemorySessionKey;
-}
-
-function persistSessionKey(key: string | null | undefined) {
-  if (typeof key === "string" && key) {
-    inMemorySessionKey = key;
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(SESSION_KEY_STORAGE, key);
-    }
-    return;
-  }
-  if (key === null) {
-    inMemorySessionKey = null;
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(SESSION_KEY_STORAGE);
-    }
-  }
-}
-
-function clearSessionKey() {
-  persistSessionKey(null);
-}
-
-function mergeHeaders(headers?: HeadersInit): Record<string, string> {
-  const result: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-
-  if (headers) {
-    if (Array.isArray(headers)) {
-      for (const [key, value] of headers) {
-        if (typeof key === "string") {
-          result[key] = String(value);
-        }
-      }
-    } else if (typeof Headers !== "undefined" && headers instanceof Headers) {
-      headers.forEach((value, key) => {
-        result[key] = value;
-      });
-    } else {
-      Object.assign(result, headers as Record<string, string>);
-    }
-  }
-
-  const sessionKey = readStoredSessionKey();
-  if (sessionKey) {
-    result["X-Session-Key"] = sessionKey;
-  }
-
-  return result;
-}
-
-function updateSessionKeyFromPayload(payload: unknown) {
-  if (!payload || typeof payload !== "object") {
-    return;
-  }
-  const nextKey = (payload as { sessionKey?: unknown }).sessionKey;
-  if (typeof nextKey === "string" && nextKey) {
-    persistSessionKey(nextKey);
-  } else if (nextKey === null) {
-    clearSessionKey();
-  }
-}
-
 function resolveApiBase(urlString: string): string {
   try {
     const url = new URL(urlString);
@@ -123,7 +48,10 @@ async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<
   const response = await fetch(`${apiBase}${normalizedPath}`, {
     credentials: "include",
     ...rest,
-    headers: mergeHeaders(headers),
+    headers: {
+      "Content-Type": "application/json",
+      ...(headers || {}),
+    },
   });
 
   if (response.status === 204 || skipJson) {
@@ -133,10 +61,6 @@ async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<
   const contentType = response.headers.get("content-type") || "";
   const isJson = contentType.includes("application/json");
   const data = isJson ? await response.json() : undefined;
-
-  if (isJson) {
-    updateSessionKeyFromPayload(data);
-  }
 
   if (!response.ok) {
     const message = (data as { error?: string; message?: string } | undefined)?.error ||
@@ -158,7 +82,6 @@ export interface SessionPayload {
   authenticated: boolean;
   user?: UserProfile;
   csrfToken?: string;
-  sessionKey?: string | null;
 }
 
 export interface ReasonedStat {
@@ -223,20 +146,19 @@ export const authApi = {
     return apiFetch<SessionPayload>("/auth/session/");
   },
   async login(username: string, password: string) {
-    return apiFetch<{ user: UserProfile; sessionKey?: string }>("/auth/login/", {
+    return apiFetch<{ user: UserProfile }>("/auth/login/", {
       method: "POST",
       body: JSON.stringify({ username, password }),
     });
   },
   async register(username: string, password: string, email?: string) {
-    return apiFetch<{ user: UserProfile; sessionKey?: string }>("/auth/register/", {
+    return apiFetch<{ user: UserProfile }>("/auth/register/", {
       method: "POST",
       body: JSON.stringify({ username, password, email }),
     });
   },
   async logout() {
     await apiFetch("/auth/logout/", { method: "POST", body: JSON.stringify({}) });
-    clearSessionKey();
   },
 };
 
@@ -246,20 +168,14 @@ export const analysisApi = {
     formData.append("file", file);
     const endpoint = includeExplanation ? "/analyze/?explain=1" : "/analyze/";
 
-    const sessionKey = readStoredSessionKey();
     const response = await fetch(`${apiBase}${normalizePath(endpoint)}`, {
       method: "POST",
       credentials: "include",
       body: formData,
-      headers: sessionKey ? { "X-Session-Key": sessionKey } : undefined,
     });
 
     const contentType = response.headers.get("content-type") || "";
     const data = contentType.includes("application/json") ? await response.json() : undefined;
-
-    if (contentType.includes("application/json")) {
-      updateSessionKeyFromPayload(data);
-    }
 
     if (!response.ok) {
       const message = (data && (data.error || data.message)) || "Failed to analyze dataset";
