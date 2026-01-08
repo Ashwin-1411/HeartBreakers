@@ -123,7 +123,7 @@ def _corsify(request, response: JsonResponse) -> JsonResponse:
     else:
         response["Access-Control-Allow-Origin"] = "*"
     response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-CSRFToken"
+    response["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-CSRFToken, X-Session-Key"
     response["Access-Control-Max-Age"] = "86400"
     response["Access-Control-Allow-Credentials"] = "true" if origin and ALLOW_CREDENTIALS else "false"
     return response
