@@ -111,7 +111,8 @@ def _resolve_origin(request) -> Optional[str]:
         if lookup:
             canonical, _, _ = lookup
             return canonical
-        return None
+        # Relaxed check: Return the origin if it exists to allow credentials from differing hosts/IPs
+        return origin
     if ALLOWED_CORS_PRIMARY:
         return ALLOWED_CORS_PRIMARY
     return None
