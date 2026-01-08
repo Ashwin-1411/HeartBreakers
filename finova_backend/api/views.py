@@ -39,15 +39,7 @@ ALLOW_CREDENTIALS = False
 
 
 def _resolve_origin(request) -> Optional[str]:
-    origin = request.headers.get("Origin") or request.META.get("HTTP_ORIGIN")
-    if origin:
-        lookup = _origin_pair_lookup(origin)
-        if lookup:
-            canonical, _, _ = lookup
-            return canonical
-        return None
-    if ALLOWED_CORS_PRIMARY:
-        return ALLOWED_CORS_PRIMARY
+    origin = request.headers.get("Origin") or request.META.get("HTTP_ORIGIN")   
     return None
 
 
