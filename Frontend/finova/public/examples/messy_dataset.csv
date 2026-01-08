@@ -1,0 +1,6 @@
+first_name,last_name,email,account_status,balance
+Ada,,ada.lovelace@example.com,active,12050.25
+Grace,Hopper,grace.hopper@example.com,ACTIVE,
+Alan,Turing,alan.turing@example.com,closed,-15400.75
+Katherine,Johnson,katherine.johnson@example,active,9325.10
+John,Doe,john.doe@example.com,pending,NaN
