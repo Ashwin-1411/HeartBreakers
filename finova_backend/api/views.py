@@ -2,7 +2,8 @@ import json
 import logging
 import os
 from decimal import Decimal
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+from urllib.parse import urlparse
 
 import pandas as pd
 from django.contrib.auth import authenticate, get_user_model, login, logout
@@ -25,25 +26,94 @@ logger = logging.getLogger(__name__)
 
 _default_origin = os.getenv("CORS_ALLOW_ORIGIN", "")
 _additional_origins = os.getenv("CORS_ALLOWED_ORIGINS", "")
-ALLOWED_CORS_ORIGINS = {
-    origin.strip()
-    for origin in (_additional_origins.split(",") if _additional_origins else [])
-    if origin.strip()
-}
+
+
+def _canonicalize_origin(origin: str) -> Optional[Tuple[str, str, str]]:
+    value = (origin or "").strip()
+    if not value:
+        return None
+    if "://" not in value:
+        value = f"http://{value}"
+    parsed = urlparse(value)
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    scheme = parsed.scheme.lower()
+    netloc = parsed.netloc.lower()
+    canonical = f"{scheme}://{parsed.netloc}"
+    return canonical, scheme, netloc
+
+
+def _localized_aliases(canonical: str) -> List[str]:
+    parsed = urlparse(canonical)
+    host = (parsed.hostname or "").lower()
+    port = parsed.port
+    if host not in {"localhost", "127.0.0.1", "0.0.0.0"}:
+        return []
+    equivalents = {"localhost", "127.0.0.1", "0.0.0.0"}
+    equivalents.discard(host)
+    aliases: List[str] = []
+    for alias_host in equivalents:
+        netloc = f"{alias_host}:{port}" if port else alias_host
+        aliases.append(f"{parsed.scheme}://{netloc}")
+    return aliases
+
+
+ALLOWED_CORS_ORIGINS: Dict[str, Tuple[str, str]] = {}
+ALLOWED_CORS_PRIMARY: Optional[str] = None
+
+
+def _register_origin(origin: str) -> None:
+    global ALLOWED_CORS_PRIMARY
+    canonicalized = _canonicalize_origin(origin)
+    if not canonicalized:
+        return
+    canonical, scheme, netloc = canonicalized
+    if canonical not in ALLOWED_CORS_ORIGINS:
+        ALLOWED_CORS_ORIGINS[canonical] = (scheme, netloc)
+        if ALLOWED_CORS_PRIMARY is None:
+            ALLOWED_CORS_PRIMARY = canonical
+    for alias in _localized_aliases(canonical):
+        alias_canonical = _canonicalize_origin(alias)
+        if not alias_canonical:
+            continue
+        alias_key, alias_scheme, alias_netloc = alias_canonical
+        if alias_key not in ALLOWED_CORS_ORIGINS:
+            ALLOWED_CORS_ORIGINS[alias_key] = (alias_scheme, alias_netloc)
+
+
+if _additional_origins:
+    for candidate in _additional_origins.split(","):
+        _register_origin(candidate)
+
 if _default_origin:
-    ALLOWED_CORS_ORIGINS.add(_default_origin.strip())
+    _register_origin(_default_origin)
+
 if not ALLOWED_CORS_ORIGINS:
-    ALLOWED_CORS_ORIGINS = {"http://localhost:3000"}
+    _register_origin("http://localhost:3000")
+
+
+def _origin_pair_lookup(origin: str) -> Optional[Tuple[str, str]]:
+    canonicalized = _canonicalize_origin(origin)
+    if not canonicalized:
+        return None
+    canonical, scheme, netloc = canonicalized
+    if canonical in ALLOWED_CORS_ORIGINS:
+        return canonical, scheme, netloc
+    return None
 
 ALLOW_CREDENTIALS = os.getenv("CORS_ALLOW_CREDENTIALS", "true").lower() != "false"
 
 
 def _resolve_origin(request) -> Optional[str]:
     origin = request.headers.get("Origin") or request.META.get("HTTP_ORIGIN")
-    if origin and origin in ALLOWED_CORS_ORIGINS:
-        return origin
-    if len(ALLOWED_CORS_ORIGINS) == 1:
-        return next(iter(ALLOWED_CORS_ORIGINS))
+    if origin:
+        lookup = _origin_pair_lookup(origin)
+        if lookup:
+            canonical, _, _ = lookup
+            return canonical
+        return None
+    if ALLOWED_CORS_PRIMARY:
+        return ALLOWED_CORS_PRIMARY
     return None
 
 
