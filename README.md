@@ -12,7 +12,6 @@
 It introduces a **universal, explainable, and privacy-preserving Data Quality Scoring (DQS)** mechanism by combining:
 
 - 🧠 **Ontology-driven semantic reasoning**
-- 🧬 **Evolutionary algorithms for multi-objective optimization**
 - 🤖 **GenAI for explainability and actionable insights**
 
 Unlike static, rule-based scoring systems, our approach **understands data context**, **optimizes trade-offs dynamically**, and **explains results transparently**—without ever exposing raw sensitive data.
