@@ -430,9 +430,36 @@ def generate_chat_response(
     dimension_scores = context.get("dimension_scores") or {}
 
     if not _is_in_scope(message, stats):
-        return (
-            "I can only discuss Finova's data-quality findings. Please ask about the dataset issues, scores, or remediation options."
+        top_findings = _rank_findings(stats)[:3] if stats else []
+        highlight_lines: List[str] = []
+        for item in top_findings:
+            attribute = item.get("attribute", "Dataset")
+            issue = (item.get("issue") or "quality issue").replace("_", " ")
+            severity = item.get("severity", "Medium")
+            rate = item.get("violation_rate")
+            if rate is not None:
+                highlight_lines.append(
+                    f"- {attribute}: {issue} (severity {severity}, rate {float(rate):.2f})"
+                )
+            else:
+                highlight_lines.append(f"- {attribute}: {issue} (severity {severity})")
+
+        response_parts = [
+            f"Overall data quality score: {overall_dqs}.",
+        ]
+
+        if isinstance(summary, str) and summary.strip():
+            response_parts.append(summary.strip())
+
+        if highlight_lines:
+            response_parts.append("Focus areas:")
+            response_parts.extend(highlight_lines)
+
+        response_parts.append(
+            "Feel free to ask about any metric, dimension, or remediation approach and I'll break it down."
         )
+
+        return "\n".join(response_parts)
 
     rows = dataset.get("rows", "unknown")
     columns = dataset.get("columns", "unknown")

@@ -345,7 +345,7 @@ function AssistantPanel({
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setInput("");
     try {
-      const response = await analysisApi.chat(trimmed, context ? { analysis: context } : undefined);
+      const response = await analysisApi.chat(trimmed, context);
       setMessages((prev) => [...prev, { role: "assistant", content: response.response }]);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to reach assistant";

@@ -10,8 +10,23 @@ export class ApiError extends Error {
   }
 }
 
-const defaultBaseUrl = "http://localhost:8000/api";
-const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || defaultBaseUrl).replace(/\/$/, "");
+const defaultBaseUrl = "http://localhost:8000";
+const configuredBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || defaultBaseUrl;
+
+function resolveApiBase(urlString: string): string {
+  try {
+    const url = new URL(urlString);
+    if (url.pathname === "/" || url.pathname === "") {
+      url.pathname = "/api";
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch (error) {
+    const sanitized = urlString.replace(/\/$/, "");
+    return sanitized.endsWith("/api") ? sanitized : `${sanitized}/api`;
+  }
+}
+
+const apiBase = resolveApiBase(configuredBaseUrl);
 
 type RequestOptions = RequestInit & { skipJson?: boolean };
 
