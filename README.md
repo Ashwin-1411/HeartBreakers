@@ -58,13 +58,7 @@ Each dimension receives:
 - Reasons over relationships and context
 - Produces **semantic abstractions**, not raw data
 
-### 🔹 2. Evolutionary Algorithm Layer
-- Multi-objective optimization
-- Dynamically balances competing dimensions
-- Stabilizes scoring across datasets
-- Replaces static weight-based formulas
-
-### 🔹 3. GenAI Layer (Explainability Only)
+### 🔹 2. GenAI Layer (Explainability Only)
 - Converts semantic outputs into:
   - Plain-language explanations
   - Actionable improvement recommendations
