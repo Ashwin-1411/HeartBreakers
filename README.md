@@ -2,7 +2,7 @@
 ### GenAI Agent for Universal, Dimension-Based Data Quality Scoring (Fintech Domain)
 
 > **Problem Statement**  
-> *An ontology-driven semantic approach embedded with evolutionary algorithms to assess dataset quality, with GenAI enabling explainability and insights.*
+> *An ontology-driven semantic approach to assess dataset quality, with GenAI enabling explainability and insights.*
 
 ---
 
