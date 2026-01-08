@@ -93,6 +93,7 @@ Each dimension receives:
 ---
 
 ## 🗂️ Repository Structure
+```text
 HeartBreakers/
 ├── Frontend/ # Dashboard & UI
 ├── finova_backend/ # Core backend logic
