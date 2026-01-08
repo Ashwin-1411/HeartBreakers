@@ -10,8 +10,7 @@ export class ApiError extends Error {
   }
 }
 
-const defaultBaseUrl = "http://localhost:8000";
-const configuredBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || defaultBaseUrl;
+const configuredBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "https://heartbreakers.onrender.com";
 
 function resolveApiBase(urlString: string): string {
   try {
@@ -28,11 +27,25 @@ function resolveApiBase(urlString: string): string {
 
 const apiBase = resolveApiBase(configuredBaseUrl);
 
+function normalizePath(path: string): string {
+  if (!path) {
+    return "/";
+  }
+
+  const [rawPath, query = ""] = path.split("?");
+  const trimmed = rawPath.trim();
+  const prefixed = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  const withTrailingSlash = prefixed.endsWith("/") ? prefixed : `${prefixed}/`;
+
+  return query ? `${withTrailingSlash}?${query}` : withTrailingSlash;
+}
+
 type RequestOptions = RequestInit & { skipJson?: boolean };
 
 async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { skipJson, headers, ...rest } = options;
-  const response = await fetch(`${apiBase}${path}`, {
+  const normalizedPath = normalizePath(path);
+  const response = await fetch(`${apiBase}${normalizedPath}`, {
     credentials: "include",
     ...rest,
     headers: {
@@ -130,22 +143,22 @@ export interface TrendResponse {
 
 export const authApi = {
   async session(): Promise<SessionPayload> {
-    return apiFetch<SessionPayload>("/auth/session");
+    return apiFetch<SessionPayload>("/auth/session/");
   },
   async login(username: string, password: string) {
-    return apiFetch<{ user: UserProfile }>("/auth/login", {
+    return apiFetch<{ user: UserProfile }>("/auth/login/", {
       method: "POST",
       body: JSON.stringify({ username, password }),
     });
   },
   async register(username: string, password: string, email?: string) {
-    return apiFetch<{ user: UserProfile }>("/auth/register", {
+    return apiFetch<{ user: UserProfile }>("/auth/register/", {
       method: "POST",
       body: JSON.stringify({ username, password, email }),
     });
   },
   async logout() {
-    await apiFetch("/auth/logout", { method: "POST", body: JSON.stringify({}) });
+    await apiFetch("/auth/logout/", { method: "POST", body: JSON.stringify({}) });
   },
 };
 
@@ -153,9 +166,9 @@ export const analysisApi = {
   async analyze(file: File, includeExplanation = true): Promise<AnalysisPayload> {
     const formData = new FormData();
     formData.append("file", file);
-    const url = includeExplanation ? "/analyze?explain=1" : "/analyze";
+    const endpoint = includeExplanation ? "/analyze/?explain=1" : "/analyze/";
 
-    const response = await fetch(`${apiBase}${url}`, {
+    const response = await fetch(`${apiBase}${normalizePath(endpoint)}`, {
       method: "POST",
       credentials: "include",
       body: formData,
@@ -173,23 +186,23 @@ export const analysisApi = {
   },
 
   async history(): Promise<HistoryListResponse> {
-    return apiFetch<HistoryListResponse>("/history");
+    return apiFetch<HistoryListResponse>("/history/");
   },
 
   async historyDetail(id: string | number): Promise<HistoryDetailResponse> {
-    return apiFetch<HistoryDetailResponse>(`/history/${id}`);
+    return apiFetch<HistoryDetailResponse>(`/history/${id}/`);
   },
 
   async trend(): Promise<TrendResponse> {
-    return apiFetch<TrendResponse>("/trend");
+    return apiFetch<TrendResponse>("/trend/");
   },
 
   async health(): Promise<{ status: string; ontology_loaded: boolean }> {
-    return apiFetch<{ status: string; ontology_loaded: boolean }>("/health");
+    return apiFetch<{ status: string; ontology_loaded: boolean }>("/health/");
   },
 
   async chat(message: string, context?: unknown): Promise<{ response: string }> {
-    return apiFetch<{ response: string }>("/chat", {
+    return apiFetch<{ response: string }>("/chat/", {
       method: "POST",
       body: JSON.stringify({ message, context }),
     });
