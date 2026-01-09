@@ -5,6 +5,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
 from django.contrib.auth import get_user_model, logout
+from django.db import IntegrityError, transaction
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
@@ -174,9 +175,13 @@ def register_user(request):
         return _bad_request(request, validation.error or "Password does not meet complexity requirements")
 
     user_model = get_user_model()
-    user = user_model.objects.create_user(username=username, email=email, password=None)
-    user.password = hash_password(password)
-    user.save(update_fields=["password"])
+    try:
+        with transaction.atomic():
+            user = user_model.objects.create_user(username=username, email=email, password=None)
+            user.password = hash_password(password)
+            user.save(update_fields=["password"])
+    except IntegrityError:
+        return _bad_request(request, "Username already exists", status_code=status.HTTP_409_CONFLICT)
     token, _ = Token.objects.get_or_create(user=user)
 
     # Returning a token here avoids any reliance on browser-managed cookies for new accounts.
